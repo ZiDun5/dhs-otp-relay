@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>إدخال الرمز — نظام التقارير</title>
+<style>
+  :root{
+    --primary:#0d7a5f; --primary-dark:#095e49; --ink:#1f2a28; --muted:#65756f;
+    --border:#dfe8e4; --bg:#eef7f4; --red:#dc2626;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    font-family:'Tajawal','Segoe UI',Tahoma,Arial,sans-serif; background:var(--bg); color:var(--ink);
+    direction:rtl; padding:20px; -webkit-font-smoothing:antialiased;
+  }
+  .card{
+    width:100%; max-width:380px; background:#fff; border-radius:16px; padding:28px 24px;
+    box-shadow:0 12px 32px -16px rgba(10,40,32,.25); border:1px solid #e7ece9; text-align:center;
+  }
+  .badge{
+    width:44px; height:44px; border-radius:12px; background:var(--primary); color:#fff;
+    display:flex; align-items:center; justify-content:center; margin:0 auto 14px;
+  }
+  .badge svg{ width:22px; height:22px; }
+  h1{ font-size:1.15rem; margin:0 0 6px; font-weight:800; color:var(--primary-dark); }
+  .sub{ font-size:.85rem; color:var(--muted); margin:0 0 20px; line-height:1.6; }
+  input[type="text"]{
+    width:100%; font-size:1.6rem; text-align:center; letter-spacing:.15em; font-weight:800;
+    padding:14px 10px; border:2px solid var(--border); border-radius:12px; color:var(--ink);
+    font-family:inherit; direction:ltr;
+  }
+  input[type="text"]:focus{ outline:none; border-color:var(--primary); }
+  button{
+    width:100%; margin-top:14px; padding:14px; border:none; border-radius:12px;
+    background:var(--primary); color:#fff; font-size:1rem; font-weight:800; font-family:inherit;
+    cursor:pointer;
+  }
+  button:disabled{ opacity:.6; cursor:default; }
+  .msg{ margin-top:14px; font-size:.85rem; font-weight:700; min-height:1.2em; }
+  .msg.err{ color:var(--red); }
+  .msg.ok{ color:var(--primary-dark); }
+  .state-hidden{ display:none; }
+  .ok-icon{ width:52px; height:52px; margin:0 auto 12px; color:var(--primary); }
+</style>
+</head>
+<body>
+  <div class="card" id="formCard">
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/></svg>
+    </div>
+    <h1 id="title">إدخال الرمز</h1>
+    <p class="sub" id="subtitle">اكتب الرمز الذي وصلك.</p>
+    <form id="codeForm">
+      <input type="text" id="codeInput" inputmode="numeric" autocomplete="one-time-code"
+             placeholder="000000" maxlength="10" autofocus required>
+      <button type="submit" id="submitBtn">إرسال</button>
+    </form>
+    <p class="msg" id="msg"></p>
+  </div>
+
+  <div class="card state-hidden" id="doneCard">
+    <svg class="ok-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><path d="M8 12.5l2.5 2.5L16 9.5"/>
+    </svg>
+    <h1>تم الإرسال</h1>
+    <p class="sub">يمكنك إغلاق هذه الصفحة الآن. سيتابع النظام العملية تلقائياً.</p>
+  </div>
+
+<script>
+  // DB URL is intentionally public in this static page — the same as any
+  // client-side Firebase config. Security comes from the RTDB rules: this
+  // path only accepts a write (never a read) and only under /relay/<rid>,
+  // where <rid> is an unguessable per-run id sent solely via a private push
+  // notification. See config/firebase-rules.json.
+  const DB_URL = 'https://dhs-clinic-scheduler-default-rtdb.europe-west1.firebasedatabase.app';
+
+  const params = new URLSearchParams(location.search);
+  const rid = params.get('rid');
+  const kind = params.get('kind'); // 'captcha' | 'otp'
+  const label = params.get('label'); // optional human context, e.g. report date
+
+  const titleEl = document.getElementById('title');
+  const subtitleEl = document.getElementById('subtitle');
+  const msgEl = document.getElementById('msg');
+  const formEl = document.getElementById('codeForm');
+  const inputEl = document.getElementById('codeInput');
+  const btnEl = document.getElementById('submitBtn');
+
+  if (kind === 'captcha') {
+    titleEl.textContent = 'رمز التحقق (CAPTCHA)';
+    subtitleEl.textContent = 'اكتب الأرقام التي رأيتها في صورة التحقق المرفقة بالإشعار' + (label ? ` — ${label}` : '') + '.';
+  } else if (kind === 'otp') {
+    titleEl.textContent = 'رمز الدخول (OTP)';
+    subtitleEl.textContent = 'اكتب رمز التحقق الذي وصلك برسالة نصية' + (label ? ` — ${label}` : '') + '.';
+  } else {
+    titleEl.textContent = 'رابط غير صالح';
+    subtitleEl.textContent = 'افتح الرابط من الإشعار الذي وصلك مباشرة.';
+    formEl.classList.add('state-hidden');
+  }
+
+  formEl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const value = inputEl.value.trim();
+    if (!value || !rid || !kind) return;
+
+    btnEl.disabled = true;
+    btnEl.textContent = 'جارٍ الإرسال...';
+    msgEl.textContent = '';
+    msgEl.className = 'msg';
+
+    try {
+      const res = await fetch(`${DB_URL}/relay/${encodeURIComponent(rid)}/${encodeURIComponent(kind)}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value, submittedAt: Date.now() }),
+      });
+      if (!res.ok) throw new Error('bad status');
+
+      document.getElementById('formCard').classList.add('state-hidden');
+      document.getElementById('doneCard').classList.remove('state-hidden');
+    } catch (err) {
+      msgEl.textContent = 'تعذّر الإرسال — تحقق من اتصال الإنترنت وحاول مرة أخرى.';
+      msgEl.className = 'msg err';
+      btnEl.disabled = false;
+      btnEl.textContent = 'إرسال';
+    }
+  });
+</script>
+</body>
+</html>
