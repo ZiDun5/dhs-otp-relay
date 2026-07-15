@@ -95,6 +95,13 @@
   } else if (kind === 'otp') {
     titleEl.textContent = 'رمز الدخول (OTP)';
     subtitleEl.textContent = 'اكتب رمز التحقق الذي وصلك برسالة نصية' + (label ? ` — ${label}` : '') + '.';
+  } else if (kind === 'presence') {
+    titleEl.textContent = 'تأكيد الجاهزية';
+    subtitleEl.textContent = 'اضغط للتأكيد أنك جاهز الآن لتسجيل الدخول' + (label ? ` — ${label}` : '') +
+      '. بعد التأكيد سيبدأ تسجيل الدخول الحقيقي خلال لحظات وستوصلك الكابتشا بعده مباشرة.';
+    inputEl.classList.add('state-hidden');
+    inputEl.required = false;
+    btnEl.textContent = 'أنا جاهز الآن';
   } else {
     titleEl.textContent = 'رابط غير صالح';
     subtitleEl.textContent = 'افتح الرابط من الإشعار الذي وصلك مباشرة.';
@@ -103,7 +110,7 @@
 
   formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const value = inputEl.value.trim();
+    const value = kind === 'presence' ? 'ready' : inputEl.value.trim();
     if (!value || !rid || !kind) return;
 
     btnEl.disabled = true;
